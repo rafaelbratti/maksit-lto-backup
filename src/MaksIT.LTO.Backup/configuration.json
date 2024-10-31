@@ -1,0 +1,19 @@
+﻿{
+  "TapePath": "\\\\.\\Tape0",
+  "Backups": [
+    {
+      "Name": "Test",
+      "Barcode": "",
+      "Source": "F:\\LTO\\Backup",
+      "Destination": "F:\\LTO\\Restore",
+      "LTOGen": "LTO5"
+    },
+    {
+      "Name": "Drivers",
+      "Barcode": "",
+      "Source": "D:\\Drivers",
+      "Destination": "F:\\LTO\\Restore",
+      "LTOGen": "LTO5"
+    }
+  ]
+}
