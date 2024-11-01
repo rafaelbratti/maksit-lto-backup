@@ -35,5 +35,6 @@ public class BackupItem {
 
 public class Configuration {
   public required string TapePath { get; set; }
+  public required int WriteDelay { get; set; }
   public required List<BackupItem> Backups { get; set; }
 }

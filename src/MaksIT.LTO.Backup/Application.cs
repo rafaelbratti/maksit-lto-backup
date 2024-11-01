@@ -59,6 +59,11 @@ public class Application {
     Console.WriteLine("Tape ejected.");
   }
 
+  public void GetDeviceStatus() {
+    using var handler = new TapeDeviceHandler(_tapePath);
+    handler.GetStatus();
+  }
+
 
   public void PathAccessWrapper(WorkingFolder workingFolder, Action<string> myAction) {
 
@@ -150,7 +155,7 @@ public class Application {
 
     for (int i = 0; i < blocks; i++) {
       handler.WriteData(new byte[blockSize]);
-      handler.WaitForTapeReady();
+      Thread.Sleep(_configuration.WriteDelay);
     }
   }
 
@@ -201,13 +206,14 @@ public class Application {
           }
           handler.WriteData(buffer);
           currentTapeBlock++;
-          handler.WaitForTapeReady();
+          Thread.Sleep(_configuration.WriteDelay); // Small delay between blocks
         }
       }
 
 
       // write mark to indicate end of files
       handler.WriteMarks(TapeDeviceHandler.TAPE_FILEMARKS, 1);
+      Thread.Sleep(_configuration.WriteDelay);
 
       // write descriptor to tape
       var descriptorData = Encoding.UTF8.GetBytes(descriptorJson);
@@ -219,7 +225,7 @@ public class Application {
         Array.Copy(descriptorData, startIndex, block, 0, length);
         handler.WriteData(block);
         currentTapeBlock++;
-        handler.WaitForTapeReady();
+        Thread.Sleep(_configuration.WriteDelay); // Small delay between blocks
       }
 
       // write 3 0 filled blocks to indicate end of backup
@@ -396,7 +402,7 @@ public class Application {
       Console.WriteLine("\nSelect a backup to perform:");
       for (int i = 0; i < _configuration.Backups.Count; i++) {
         var backupInt = _configuration.Backups[i];
-        Console.WriteLine($"{i + 1}. Backup Name: {backupInt.Name}, Bar code {backupInt.Barcode}, Source: {backupInt.Source}, Destination: {backupInt.Destination}");
+        Console.WriteLine($"{i + 1}. Backup Name: {backupInt.Name}, Bar code {(string.IsNullOrEmpty(backupInt.Barcode) ? "None" : backupInt.Barcode)}, Source: {backupInt.Source}, Destination: {backupInt.Destination}");
       }
 
       Console.Write("Enter your choice (or '0' to go back): ");
@@ -437,7 +443,7 @@ public class Application {
       Console.WriteLine("\nSelect a backup to restore:");
       for (int i = 0; i < _configuration.Backups.Count; i++) {
         var backupInt = _configuration.Backups[i];
-        Console.WriteLine($"{i + 1}. Backup Name: {backupInt.Name}, Bar code {backupInt.Barcode}, Source: {backupInt.Source}, Destination: {backupInt.Destination}");
+        Console.WriteLine($"{i + 1}. Backup Name: {backupInt.Name}, Bar code {(string.IsNullOrEmpty(backupInt.Barcode) ? "None" : backupInt.Barcode)}, Source: {backupInt.Source}, Destination: {backupInt.Destination}");
       }
 
       Console.Write("Enter your choice (or '0' to go back): ");

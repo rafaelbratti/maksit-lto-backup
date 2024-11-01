@@ -18,8 +18,9 @@ class Program {
       Console.WriteLine("2. Backup");
       Console.WriteLine("3. Restore");
       Console.WriteLine("4. Eject tape");
-      Console.WriteLine("5. Reload configurations");
-      Console.WriteLine("6. Exit");
+      Console.WriteLine("5. Get device status");
+      Console.WriteLine("6. Reload configurations");
+      Console.WriteLine("7. Exit");
       Console.Write("Enter your choice: ");
 
       var choice = Console.ReadLine();
@@ -38,11 +39,13 @@ class Program {
           case "4":
             app.EjectTape();
             break;
-
           case "5":
-            app.LoadConfiguration();
+            app.GetDeviceStatus();
             break;
           case "6":
+            app.LoadConfiguration();
+            break;
+          case "7":
             Console.WriteLine("Exiting...");
             return;
           default:
