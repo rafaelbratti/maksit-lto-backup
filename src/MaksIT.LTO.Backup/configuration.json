@@ -2,18 +2,37 @@
   "TapePath": "\\\\.\\Tape0",
   "Backups": [
     {
-      "Name": "Test",
+      "Name": "Normal test",
       "Barcode": "",
-      "Source": "F:\\LTO\\Backup",
-      "Destination": "F:\\LTO\\Restore",
-      "LTOGen": "LTO5"
+      "LTOGen": "LTO5",
+      "Source": {
+        "LocalPath": {
+          "Path": "D:\\Drivers"
+        }
+      },
+      "Destination": {
+        "LocalPath": {
+          "Path": "F:\\LTO\\Restore"
+        }
+      }
     },
     {
-      "Name": "Drivers",
+      "Name": "Network test",
       "Barcode": "",
-      "Source": "D:\\Drivers",
-      "Destination": "F:\\LTO\\Restore",
-      "LTOGen": "LTO5"
+      "LTOGen": "LTO5",
+      "Source": {
+        "RemotePath": {
+          "Path": "\\\\nasrv0001.corp.maks-it.com\\LTO\\Backup",
+          "Credentials": {
+            "Username": "user",
+            "Password": "password"
+          }
+        }
+      },
+      "Destination": {
+        "Path": "F:\\LTO\\Restore"
+      }
     }
+}
   ]
 }
