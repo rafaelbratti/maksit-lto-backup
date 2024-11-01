@@ -1,6 +1,6 @@
 ﻿{
   "TapePath": "\\\\.\\Tape0",
-  "WriteDelay": 100,
+  "WriteDelay": 1000,
   "Backups": [
     {
       "Name": "Normal test",
@@ -8,7 +8,7 @@
       "LTOGen": "LTO5",
       "Source": {
         "LocalPath": {
-          "Path": "F:\\LTO\\Backup"
+          "Path": "D:\\Program Files"
         }
       },
       "Destination": {

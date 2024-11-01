@@ -42,7 +42,7 @@ public class Application {
 
   public void LoadTape(TapeDeviceHandler handler) {
     handler.Prepare(TapeDeviceHandler.TAPE_LOAD);
-    handler.WaitForTapeReady();
+    Thread.Sleep(2000);
 
     Console.WriteLine("Tape loaded.");
   }
@@ -54,10 +54,35 @@ public class Application {
 
   public void EjectTape(TapeDeviceHandler handler) {
     handler.Prepare(TapeDeviceHandler.TAPE_UNLOAD);
-    handler.WaitForTapeReady();
+    Thread.Sleep(2000);
 
     Console.WriteLine("Tape ejected.");
   }
+
+  public void TapeErase() {
+    using var handler = new TapeDeviceHandler(_tapePath);
+    LoadTape(handler);
+
+    handler.SetMediaParams(LTOBlockSizes.LTO5);
+
+    handler.SetPosition(TapeDeviceHandler.TAPE_REWIND);
+    Thread.Sleep(2000);
+
+    handler.Prepare(TapeDeviceHandler.TAPE_TENSION);
+    Thread.Sleep(2000);
+
+    handler.Prepare(TapeDeviceHandler.TAPE_LOCK);
+    Thread.Sleep(2000);
+
+    handler.Erase(TapeDeviceHandler.TAPE_ERASE_SHORT);
+    Thread.Sleep(2000);
+
+    handler.SetPosition(TapeDeviceHandler.TAPE_REWIND);
+    Thread.Sleep(2000);
+
+    Console.WriteLine("Tape erased.");
+  }
+
 
   public void GetDeviceStatus() {
     using var handler = new TapeDeviceHandler(_tapePath);
@@ -176,13 +201,13 @@ public class Application {
       handler.SetMediaParams(blockSize);
 
       handler.SetPosition(TapeDeviceHandler.TAPE_REWIND);
-      handler.WaitForTapeReady();
+      Thread.Sleep(2000);
 
       handler.Prepare(TapeDeviceHandler.TAPE_TENSION);
-      handler.WaitForTapeReady();
+      Thread.Sleep(2000);
 
       handler.Prepare(TapeDeviceHandler.TAPE_LOCK);
-      handler.WaitForTapeReady();
+      Thread.Sleep(2000);
 
       handler.WaitForTapeReady();
 
@@ -214,8 +239,10 @@ public class Application {
           }
           
           writeError = handler.WriteData(buffer);
-          if (writeError != 0)
+          if (writeError != 0) {
+            Console.WriteLine($"Failed to write file: {filePath}");
             return;
+          }
 
           currentTapeBlock++;
           Thread.Sleep(_configuration.WriteDelay); // Small delay between blocks
@@ -248,9 +275,10 @@ public class Application {
       ZeroFillBlocks(handler, 3, blockSize);
 
       handler.Prepare(TapeDeviceHandler.TAPE_UNLOCK);
-      handler.WaitForTapeReady();
+      Thread.Sleep(2000);
+
       handler.SetPosition(TapeDeviceHandler.TAPE_REWIND);
-      handler.WaitForTapeReady();
+      Thread.Sleep(2000);
 
     });
   }
@@ -266,10 +294,10 @@ public class Application {
     handler.SetMediaParams(blockSize);
 
     handler.SetPosition(TapeDeviceHandler.TAPE_REWIND);
-    handler.WaitForTapeReady();
+    Thread.Sleep(2000);
 
     handler.SetPosition(TapeDeviceHandler.TAPE_SPACE_FILEMARKS, 0, 1);
-    handler.WaitForTapeReady();
+    Thread.Sleep(2000);
 
     handler.WaitForTapeReady();
 
@@ -313,9 +341,10 @@ public class Application {
 
 
     handler.Prepare(TapeDeviceHandler.TAPE_UNLOCK);
-    handler.WaitForTapeReady();
+    Thread.Sleep(2000);
+
     handler.SetPosition(TapeDeviceHandler.TAPE_REWIND);
-    handler.WaitForTapeReady();
+    Thread.Sleep(2000);
 
     return null;
   }
@@ -333,14 +362,12 @@ public class Application {
       handler.SetMediaParams(descriptor.BlockSize);
 
       handler.SetPosition(TapeDeviceHandler.TAPE_REWIND);
-      handler.WaitForTapeReady();
-
-      handler.WaitForTapeReady();
+      Thread.Sleep(2000);
 
       foreach (var file in descriptor.Files) {
         // Set position to the start block of the file
         handler.SetPosition(TapeDeviceHandler.TAPE_ABSOLUTE_BLOCK, 0, file.StartBlock);
-        handler.WaitForTapeReady();
+        Thread.Sleep(2000);
 
         var filePath = Path.Combine(restoreDirectoryPath, file.FilePath);
         var directoryPath = Path.GetDirectoryName(filePath);
@@ -380,7 +407,7 @@ public class Application {
       }
 
       handler.SetPosition(TapeDeviceHandler.TAPE_REWIND);
-      handler.WaitForTapeReady();
+      Thread.Sleep(2000);
     });
   }
 
