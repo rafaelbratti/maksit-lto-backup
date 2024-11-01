@@ -12,7 +12,7 @@ public class LocalPath : PathBase {
 
 public class PasswordCredentials {
   public required string Username { get; set; }
-  public required SecureString Password { get; set; }
+  public required string Password { get; set; }
 }
 
 public class RemotePath : PathBase {
