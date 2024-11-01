@@ -42,7 +42,7 @@ public class Application {
 
   public void LoadTape(TapeDeviceHandler handler) {
     handler.Prepare(TapeDeviceHandler.TAPE_LOAD);
-    Thread.Sleep(2000);
+    handler.WaitForTapeReady();
 
     Console.WriteLine("Tape loaded.");
   }
@@ -54,7 +54,7 @@ public class Application {
 
   public void EjectTape(TapeDeviceHandler handler) {
     handler.Prepare(TapeDeviceHandler.TAPE_UNLOAD);
-    Thread.Sleep(2000);
+    handler.WaitForTapeReady();
 
     Console.WriteLine("Tape ejected.");
   }
@@ -150,7 +150,7 @@ public class Application {
 
     for (int i = 0; i < blocks; i++) {
       handler.WriteData(new byte[blockSize]);
-      Thread.Sleep(100);
+      handler.WaitForTapeReady();
     }
   }
 
@@ -166,13 +166,13 @@ public class Application {
       handler.SetMediaParams(blockSize);
 
       handler.SetPosition(TapeDeviceHandler.TAPE_REWIND);
-      Thread.Sleep(2000);
+      handler.WaitForTapeReady();
 
       handler.Prepare(TapeDeviceHandler.TAPE_TENSION);
-      Thread.Sleep(2000);
+      handler.WaitForTapeReady();
 
       handler.Prepare(TapeDeviceHandler.TAPE_LOCK);
-      Thread.Sleep(2000);
+      handler.WaitForTapeReady();
 
       handler.WaitForTapeReady();
 
@@ -201,7 +201,7 @@ public class Application {
           }
           handler.WriteData(buffer);
           currentTapeBlock++;
-          Thread.Sleep(100); // Small delay between blocks
+          handler.WaitForTapeReady();
         }
       }
 
@@ -219,16 +219,16 @@ public class Application {
         Array.Copy(descriptorData, startIndex, block, 0, length);
         handler.WriteData(block);
         currentTapeBlock++;
-        Thread.Sleep(100); // Small delay between blocks
+        handler.WaitForTapeReady();
       }
 
       // write 3 0 filled blocks to indicate end of backup
       ZeroFillBlocks(handler, 3, blockSize);
 
       handler.Prepare(TapeDeviceHandler.TAPE_UNLOCK);
-      Thread.Sleep(2000);
+      handler.WaitForTapeReady();
       handler.SetPosition(TapeDeviceHandler.TAPE_REWIND);
-      Thread.Sleep(2000);
+      handler.WaitForTapeReady();
 
     });
   }
@@ -244,10 +244,10 @@ public class Application {
     handler.SetMediaParams(blockSize);
 
     handler.SetPosition(TapeDeviceHandler.TAPE_REWIND);
-    Thread.Sleep(2000);
+    handler.WaitForTapeReady();
 
     handler.SetPosition(TapeDeviceHandler.TAPE_SPACE_FILEMARKS, 0, 1);
-    Thread.Sleep(2000);
+    handler.WaitForTapeReady();
 
     handler.WaitForTapeReady();
 
@@ -291,9 +291,9 @@ public class Application {
 
 
     handler.Prepare(TapeDeviceHandler.TAPE_UNLOCK);
-    Thread.Sleep(2000);
+    handler.WaitForTapeReady();
     handler.SetPosition(TapeDeviceHandler.TAPE_REWIND);
-    Thread.Sleep(2000);
+    handler.WaitForTapeReady();
 
     return null;
   }
@@ -311,14 +311,14 @@ public class Application {
       handler.SetMediaParams(descriptor.BlockSize);
 
       handler.SetPosition(TapeDeviceHandler.TAPE_REWIND);
-      Thread.Sleep(2000);
+      handler.WaitForTapeReady();
 
       handler.WaitForTapeReady();
 
       foreach (var file in descriptor.Files) {
         // Set position to the start block of the file
         handler.SetPosition(TapeDeviceHandler.TAPE_ABSOLUTE_BLOCK, 0, file.StartBlock);
-        Thread.Sleep(2000);
+        handler.WaitForTapeReady();
 
         var filePath = Path.Combine(restoreDirectoryPath, file.FilePath);
         var directoryPath = Path.GetDirectoryName(filePath);
@@ -358,7 +358,7 @@ public class Application {
       }
 
       handler.SetPosition(TapeDeviceHandler.TAPE_REWIND);
-      Thread.Sleep(2000);
+      handler.WaitForTapeReady();
     });
   }
 

@@ -151,10 +151,8 @@ public partial class TapeDeviceHandler : IDisposable {
       if (errorCode == 0) // Assuming 0 means success/ready
       {
         isReady = true;
-        Console.WriteLine("Tape is ready.");
       }
       else {
-        Console.WriteLine($"Tape not ready, status code: {errorCode}. Retrying...");
         Thread.Sleep(1000); // Wait 1 second before checking again
       }
     }
