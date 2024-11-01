@@ -153,8 +153,13 @@ public class Application {
     Console.WriteLine($"Writing {blocks} zero-filled blocks to tape.");
     Console.WriteLine($"Block Size: {blockSize}.");
 
+    var writeError = 0;
+
     for (int i = 0; i < blocks; i++) {
-      handler.WriteData(new byte[blockSize]);
+      writeError = handler.WriteData(new byte[blockSize]);
+      if (writeError != 0)
+        return;
+
       Thread.Sleep(_configuration.WriteDelay);
     }
   }
@@ -191,6 +196,9 @@ public class Application {
 
       var currentTapeBlock = (descriptorJson.Length + blockSize - 1) / blockSize;
 
+
+      int writeError = 0;
+
       foreach (var file in descriptor.Files) {
         var filePath = Path.Combine(directoryPath, file.FilePath);
         using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
@@ -204,7 +212,11 @@ public class Application {
             // Zero-fill the remaining part of the buffer if the last block is smaller than blockSize
             Array.Clear(buffer, bytesRead, buffer.Length - bytesRead);
           }
-          handler.WriteData(buffer);
+          
+          writeError = handler.WriteData(buffer);
+          if (writeError != 0)
+            return;
+
           currentTapeBlock++;
           Thread.Sleep(_configuration.WriteDelay); // Small delay between blocks
         }
@@ -223,7 +235,11 @@ public class Application {
         var length = Math.Min(blockSize, descriptorData.Length - startIndex);
         byte[] block = new byte[blockSize]; // Initialized with zeros by default
         Array.Copy(descriptorData, startIndex, block, 0, length);
-        handler.WriteData(block);
+        
+        writeError = handler.WriteData(block);
+        if (writeError != 0)
+          return;
+
         currentTapeBlock++;
         Thread.Sleep(_configuration.WriteDelay); // Small delay between blocks
       }

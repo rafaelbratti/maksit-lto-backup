@@ -82,7 +82,7 @@ public partial class TapeDeviceHandler : IDisposable {
   }
 
 
-  public void WriteData(byte[] data) {
+  public int WriteData(byte[] data) {
     IntPtr unmanagedPointer = Marshal.AllocHGlobal(data.Length);
     try {
       Marshal.Copy(data, 0, unmanagedPointer, data.Length);
@@ -94,11 +94,14 @@ public partial class TapeDeviceHandler : IDisposable {
       else {
         int error = Marshal.GetLastWin32Error();
         Console.WriteLine($"Write Data: Failed with error code {error}");
+        return error;
       }
     }
     finally {
       Marshal.FreeHGlobal(unmanagedPointer);
     }
+
+    return 0;
   }
 
   public byte[] ReadData(uint length) {
