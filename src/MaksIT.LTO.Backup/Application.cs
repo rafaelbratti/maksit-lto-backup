@@ -1,42 +1,102 @@
 ﻿using System.Text;
 using System.Text.Json;
-using System.Diagnostics.CodeAnalysis;
+using System.Net;
+
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 using MaksIT.LTO.Core;
 using MaksIT.LTO.Backup.Entities;
-using System.Net;
+using MaksIT.LTO.Core.MassStorage;
+using MaksIT.LTO.Core.Networking;
+
 
 namespace MaksIT.LTO.Backup;
+
 public class Application {
 
   private const string _descriptoFileName = "descriptor.json";
-  private const string _configurationFileName = "configuration.json";
 
   private readonly string appPath = AppDomain.CurrentDomain.BaseDirectory;
   private readonly string _tapePath;
   private readonly string _descriptorFilePath;
 
-  private Configuration _configuration;
+  private readonly ILogger<Application> _logger;
+  private readonly ILogger<TapeDeviceHandler> _tapeDeviceLogger;
+  private readonly ILogger<NetworkConnection> _networkConnectionLogger;
 
-  public Application() {
+  private readonly Configuration _configuration;
+
+  public Application(
+    ILogger<Application> logger,
+    ILoggerFactory loggerFactory,
+    IOptions<Configuration> configuration
+  ) {
+    _logger = logger;
+    _tapeDeviceLogger = loggerFactory.CreateLogger<TapeDeviceHandler>();
+    _networkConnectionLogger = loggerFactory.CreateLogger<NetworkConnection>();
+
     _descriptorFilePath = Path.Combine(appPath, _descriptoFileName);
-    LoadConfiguration();
 
+    _configuration = configuration.Value;
     _tapePath = _configuration.TapePath;
   }
 
-  [MemberNotNull(nameof(_configuration))]
-  public void LoadConfiguration() {
-    var configFilePath = Path.Combine(appPath, _configurationFileName);
-    var configuration = JsonSerializer.Deserialize<Configuration>(File.ReadAllText(configFilePath));
-    if (configuration == null)
-      throw new InvalidOperationException("Failed to deserialize configuration.");
+  public void Run() {
+    Console.OutputEncoding = Encoding.UTF8;
 
-    _configuration = configuration;
+    while (true) {
+      Console.WriteLine("MaksIT.LTO.Backup v0.0.1");
+      Console.WriteLine("© Maksym Sadovnychyy (MAKS-IT) 2024");
+
+      Console.WriteLine("\nSelect an action:");
+      Console.WriteLine("1. Load tape");
+      Console.WriteLine("2. Backup");
+      Console.WriteLine("3. Restore");
+      Console.WriteLine("4. Eject tape");
+      Console.WriteLine("5. Get device status");
+      Console.WriteLine("6. Tape Erase (Short)");
+      Console.WriteLine("7. Exit");
+      Console.Write("Enter your choice: ");
+
+      var choice = Console.ReadLine();
+
+      try {
+        switch (choice) {
+          case "1":
+            LoadTape();
+            break;
+          case "2":
+            Backup();
+            break;
+          case "3":
+            Restore();
+            break;
+          case "4":
+            EjectTape();
+            break;
+          case "5":
+            GetDeviceStatus();
+            break;
+          case "6":
+            TapeErase();
+            break;
+          case "7":
+            Console.WriteLine("Exiting...");
+            return;
+          default:
+            Console.WriteLine("Invalid choice. Please try again.");
+            break;
+        }
+      }
+      catch (Exception ex) {
+        _logger.LogError(ex, $"An error occurred: {ex.Message}");
+      }
+    }
   }
 
   public void LoadTape() {
-    using var handler = new TapeDeviceHandler(_tapePath);
+    using var handler = new TapeDeviceHandler(_tapeDeviceLogger, _tapePath);
     LoadTape(handler);
   }
 
@@ -44,11 +104,11 @@ public class Application {
     handler.Prepare(TapeDeviceHandler.TAPE_LOAD);
     Thread.Sleep(2000);
 
-    Console.WriteLine("Tape loaded.");
+    _logger.LogInformation("Tape loaded.");
   }
 
   public void EjectTape() {
-    using var handler = new TapeDeviceHandler(_tapePath);
+    using var handler = new TapeDeviceHandler(_tapeDeviceLogger, _tapePath);
     EjectTape(handler);
   }
 
@@ -56,11 +116,11 @@ public class Application {
     handler.Prepare(TapeDeviceHandler.TAPE_UNLOAD);
     Thread.Sleep(2000);
 
-    Console.WriteLine("Tape ejected.");
+    _logger.LogInformation("Tape ejected.");
   }
 
   public void TapeErase() {
-    using var handler = new TapeDeviceHandler(_tapePath);
+    using var handler = new TapeDeviceHandler(_tapeDeviceLogger, _tapePath);
     LoadTape(handler);
 
     handler.SetMediaParams(LTOBlockSizes.LTO5);
@@ -80,15 +140,13 @@ public class Application {
     handler.SetPosition(TapeDeviceHandler.TAPE_REWIND);
     Thread.Sleep(2000);
 
-    Console.WriteLine("Tape erased.");
+    _logger.LogInformation("Tape erased.");
   }
-
 
   public void GetDeviceStatus() {
-    using var handler = new TapeDeviceHandler(_tapePath);
+    using var handler = new TapeDeviceHandler(_tapeDeviceLogger, _tapePath);
     handler.GetStatus();
   }
-
 
   public void PathAccessWrapper(WorkingFolder workingFolder, Action<string> myAction) {
 
@@ -117,7 +175,7 @@ public class Application {
           throw new InvalidOperationException("Network credentials are required for remote paths.");
         }
           
-        using (new NetworkConnection(smbPath, networkCredential)) {
+        using (new NetworkConnection(_networkConnectionLogger, smbPath, networkCredential)) {
            myAction(smbPath);
         }
       }
@@ -175,8 +233,8 @@ public class Application {
   }
 
   private void ZeroFillBlocks(TapeDeviceHandler handler, int blocks, uint blockSize) {
-    Console.WriteLine($"Writing {blocks} zero-filled blocks to tape.");
-    Console.WriteLine($"Block Size: {blockSize}.");
+    _logger.LogInformation($"Writing {blocks} zero-filled blocks to tape.");
+    _logger.LogInformation($"Block Size: {blockSize}.");
 
     var writeError = 0;
 
@@ -191,10 +249,10 @@ public class Application {
 
   public void WriteFilesToTape(WorkingFolder workingFolder, string descriptorFilePath, uint blockSize) {
     PathAccessWrapper(workingFolder, (directoryPath) => {
-      Console.WriteLine($"Writing files to tape from: {directoryPath}.");
-      Console.WriteLine($"Block Size: {blockSize}.");
+      _logger.LogInformation($"Writing files to tape from: {directoryPath}.");
+      _logger.LogInformation($"Block Size: {blockSize}.");
 
-      using var handler = new TapeDeviceHandler(_tapePath);
+      using var handler = new TapeDeviceHandler(_tapeDeviceLogger, _tapePath);
 
       LoadTape(handler);
 
@@ -240,7 +298,7 @@ public class Application {
           
           writeError = handler.WriteData(buffer);
           if (writeError != 0) {
-            Console.WriteLine($"Failed to write file: {filePath}");
+            _logger.LogInformation($"Failed to write file: {filePath}");
             return;
           }
 
@@ -284,10 +342,10 @@ public class Application {
   }
 
   public BackupDescriptor? FindDescriptor(uint blockSize) {
-    Console.WriteLine("Searching for descriptor on tape...");
-    Console.WriteLine($"Block Size: {blockSize}.");
+    _logger.LogInformation("Searching for descriptor on tape...");
+    _logger.LogInformation($"Block Size: {blockSize}.");
 
-    using var handler = new TapeDeviceHandler(_tapePath);
+    using var handler = new TapeDeviceHandler(_tapeDeviceLogger,_tapePath);
 
     LoadTape(handler);
 
@@ -331,12 +389,12 @@ public class Application {
     try {
       var descriptor = JsonSerializer.Deserialize<BackupDescriptor>(json);
       if (descriptor != null) {
-        Console.WriteLine("Descriptor read successfully.");
+        _logger.LogInformation("Descriptor read successfully.");
         return descriptor;
       }
     }
     catch (JsonException ex) {
-      Console.WriteLine($"Failed to parse descriptor JSON: {ex.Message}");
+      _logger.LogInformation($"Failed to parse descriptor JSON: {ex.Message}");
     }
 
 
@@ -352,10 +410,10 @@ public class Application {
   public void RestoreDirectory(BackupDescriptor descriptor, WorkingFolder workingFolder) {
 
     PathAccessWrapper(workingFolder, (restoreDirectoryPath) => {
-      Console.WriteLine("Restoring files to directory: " + restoreDirectoryPath);
-      Console.WriteLine("Block Size: " + descriptor.BlockSize);
+      _logger.LogInformation("Restoring files to directory: " + restoreDirectoryPath);
+      _logger.LogInformation("Block Size: " + descriptor.BlockSize);
 
-      using var handler = new TapeDeviceHandler(_tapePath);
+      using var handler = new TapeDeviceHandler(_tapeDeviceLogger,_tapePath);
 
       LoadTape(handler);
 
@@ -397,10 +455,10 @@ public class Application {
             var fileHashString = BitConverter.ToString(fileHash).Replace("-", "").ToLower();
 
             if (fileHashString != file.FileHash) {
-              Console.WriteLine($"Checksum mismatch for file: {filePath}");
+              _logger.LogInformation($"Checksum mismatch for file: {filePath}");
             }
             else {
-              Console.WriteLine($"Restored file: {filePath}");
+              _logger.LogInformation($"Restored file: {filePath}");
             }
           }
         }
@@ -414,7 +472,7 @@ public class Application {
   public int CheckMediaSize(string ltoGen) {
     var descriptor = JsonSerializer.Deserialize<BackupDescriptor>(File.ReadAllText(_descriptorFilePath));
     if (descriptor == null) {
-      Console.WriteLine("Failed to read descriptor.");
+      _logger.LogInformation("Failed to read descriptor.");
       return 1;
     }
 
@@ -430,11 +488,11 @@ public class Application {
 
     var maxBlocks = LTOBlockSizes.GetMaxBlocks(ltoGen);
     if (totalBlocks > maxBlocks) {
-      Console.WriteLine("Backup will not fit on tape. Please use a larger tape.");
+      _logger.LogInformation("Backup will not fit on tape. Please use a larger tape.");
       return 1;
     }
     else {
-      Console.WriteLine("Backup will fit on tape.");
+      _logger.LogInformation("Backup will fit on tape.");
     }
 
     return 0;
@@ -442,21 +500,21 @@ public class Application {
 
   public void Backup() {
     while (true) {
-      Console.WriteLine("\nSelect a backup to perform:");
+      _logger.LogInformation("\nSelect a backup to perform:");
       for (int i = 0; i < _configuration.Backups.Count; i++) {
         var backupInt = _configuration.Backups[i];
-        Console.WriteLine($"{i + 1}. Backup Name: {backupInt.Name}, Bar code {(string.IsNullOrEmpty(backupInt.Barcode) ? "None" : backupInt.Barcode)}, Source: {backupInt.Source}, Destination: {backupInt.Destination}");
+        _logger.LogInformation($"{i + 1}. Backup Name: {backupInt.Name}, Bar code {(string.IsNullOrEmpty(backupInt.Barcode) ? "None" : backupInt.Barcode)}, Source: {backupInt.Source}, Destination: {backupInt.Destination}");
       }
 
       Console.Write("Enter your choice (or '0' to go back): ");
       var choice = Console.ReadLine();
 
       if (choice == "0") {
-        return; // Go back to the main menu
+        return;
       }
 
       if (!int.TryParse(choice, out int index) || index < 1 || index > _configuration.Backups.Count) {
-        Console.WriteLine("Invalid choice. Please try again.");
+        _logger.LogInformation("Invalid choice. Please try again.");
         continue;
       }
 
@@ -476,28 +534,28 @@ public class Application {
       WriteFilesToTape(backup.Source, _descriptorFilePath, blockSize);
 
       File.Delete(_descriptorFilePath);
-      Console.WriteLine("Backup completed.");
-      return; // Go back to the main menu after completing the backup
+      _logger.LogInformation("Backup completed.");
+      return;
     }
   }
 
   public void Restore() {
     while (true) {
-      Console.WriteLine("\nSelect a backup to restore:");
+      _logger.LogInformation("\nSelect a backup to restore:");
       for (int i = 0; i < _configuration.Backups.Count; i++) {
         var backupInt = _configuration.Backups[i];
-        Console.WriteLine($"{i + 1}. Backup Name: {backupInt.Name}, Bar code {(string.IsNullOrEmpty(backupInt.Barcode) ? "None" : backupInt.Barcode)}, Source: {backupInt.Source}, Destination: {backupInt.Destination}");
+        _logger.LogInformation($"{i + 1}. Backup Name: {backupInt.Name}, Bar code {(string.IsNullOrEmpty(backupInt.Barcode) ? "None" : backupInt.Barcode)}, Source: {backupInt.Source}, Destination: {backupInt.Destination}");
       }
 
       Console.Write("Enter your choice (or '0' to go back): ");
       var choice = Console.ReadLine();
 
       if (choice == "0") {
-        return; // Go back to the main menu
+        return;
       }
 
       if (!int.TryParse(choice, out int index) || index < 1 || index > _configuration.Backups.Count) {
-        Console.WriteLine("Invalid choice. Please try again.");
+        _logger.LogInformation("Invalid choice. Please try again.");
         continue;
       }
 
@@ -505,21 +563,22 @@ public class Application {
       
       uint blockSize = LTOBlockSizes.GetBlockSize(backup.LTOGen);
 
+      // Step 1: Find Descriptor on Tape
       var descriptor = FindDescriptor(blockSize);
       if (descriptor != null) {
         var json = JsonSerializer.Serialize(descriptor, new JsonSerializerOptions { WriteIndented = true });
-        Console.WriteLine(json);
+        _logger.LogInformation(json);
       }
 
       if (descriptor == null) {
-        Console.WriteLine("Descriptor not found on tape.");
+        _logger.LogInformation("Descriptor not found on tape.");
         return;
       }
 
-      // Step 3: Test restore from tape
+      // Step 2: Restore Files to Directory
       RestoreDirectory(descriptor, backup.Destination);
-      Console.WriteLine("Restore completed.");
-      return; // Go back to the main menu after completing the restore
+      _logger.LogInformation("Restore completed.");
+      return;
     }
   }
 }
