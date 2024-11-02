@@ -43,5 +43,6 @@ If the issue is specific to a particular LTO version that you cannot test, pleas
 If you have any questions or need further assistance, feel free to reach out:
 
 - **Email**: [maksym.sadovnychyy@gmail.com](mailto:maksym.sadovnychyy@gmail.com)
+- **Reddit**: [MaksIT.LTO.Backup: A Simplified CLI Tool for Windows LTO Tape Backups](https://www.reddit.com/r/MaksIT/comments/1ghgbx5/maksitltobackup_a_simplified_cli_tool_for_windows/?utm_source=share&utm_medium=web3x&utm_name=web3xcss&utm_term=1&utm_content=share_button)
 
 Thank you for considering contributing, and feel free to reach out if you have questions! Your support helps make MaksIT.LTO.Backup better for everyone.

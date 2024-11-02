@@ -150,6 +150,13 @@ Below is an example configuration setup for an LTO-6 tape generation backup oper
 
 Errors during backup or restore are caught and logged to the console. Ensure that your `TapeDeviceHandler` is correctly configured and that the tape drive is accessible.
 
+## Contact
+
+If you have any questions or need further assistance, feel free to reach out:
+
+- **Email**: [maksym.sadovnychyy@gmail.com](mailto:maksym.sadovnychyy@gmail.com)
+- **Reddit**: [MaksIT.LTO.Backup: A Simplified CLI Tool for Windows LTO Tape Backups](https://www.reddit.com/r/MaksIT/comments/1ghgbx5/maksitltobackup_a_simplified_cli_tool_for_windows/?utm_source=share&utm_medium=web3x&utm_name=web3xcss&utm_term=1&utm_content=share_button)
+
 ## License
 
 This project is licensed under the terms of the GPLv2. See the [LICENSE](./LICENSE) file for full details.
