@@ -1,15 +1,25 @@
 # MaksIT.LTO.Backup
 
+**⚠️ Warning: This program is currently under fine-tuning and some features are still being added. Extensive real-world testing is still in progress. Use it at your own risk until a stable version is released.**
+
 A C# application designed to facilitate backup and restore operations to an LTO tape drive. This application enables seamless management of backups by handling file organization, descriptor creation, and efficient tape handling processes for loading, writing, and restoring data.
+
+## Version History
+
+**v0.0.1 - Initial Release (01/11/2024)**
+- Initial implementation of backup and restore operations.
+- Support for loading and ejecting tape.
+- Basic file descriptor management.
+- Customizable block sizes for different LTO generations.
+- File checksum verification during restore
 
 ## Features
 
 - **Load and Eject Tape**: Safely loads and unloads the tape using `TapeDeviceHandler`.
 - **Backup Operation**: Allows users to create a descriptor file for organizing file metadata and backs up files to the LTO tape in structured blocks.
-- **Restore Operation**: Reads data from the tape and restores files to a specified directory, reconstructing original file structure.
+- **File Descriptor Management**: Metadata is organized for each file, including file paths, sizes, creation, modification times and checksum.
+- **Restore Operation**: Reads data from the tape and restores files to a specified directory, reconstructing original file structure with checksum verifications.
 - **Customizable Block Sizes**: Supports multiple LTO generations, allowing customization of block sizes based on the tape generation (e.g., LTO-6).
-- **File Descriptor Management**: Metadata is organized for each file, including file paths, sizes, creation, and modification times.
-- **Zero-Filled End Blocks**: Marks the end of a backup with zero-filled blocks to assist with reading and integrity checks.
 
 ## Requirements
 
@@ -76,7 +86,7 @@ A C# application designed to facilitate backup and restore operations to an LTO 
 
 Execute the application by navigating to the project directory and running:
 ```bash
-dotnet run
+dotnet build && dotnet run
 ```
 
 ### Application Menu
@@ -86,12 +96,11 @@ Upon running, the following options will be presented:
 1. **Load Tape**: Loads the tape into the drive.
 2. **Backup**: Prompts the user to select a backup task from the configured list and initiates the backup process.
 3. **Restore**: Restores a previously backed-up directory from the tape.
-4. **Eject Tape**: Ejects the tape from the drive safely.
+4. **Eject Tape**: Ejects the tape from the drive.
 5. **Get device status**: Mostly used for debugging to understand if device is able to write
-6. **Tape Erase (Short)**: 
-7. **Reload configurations**
-6. **Exit**: Exits the application.
-
+6. **Tape Erase (Short)**: Short tape erase
+7. **Reload configurations**: Works outside development evironment, used to reload configurations in case of `configuration.json` is changed
+8. **Exit**: Exits the application.
 
 ### Code Overview
 
@@ -149,7 +158,7 @@ Below is an example configuration setup for an LTO-6 tape generation backup oper
 
 ### Error Handling
 
-Errors during backup or restore are caught and logged to the console. Ensure that your `TapeDeviceHandler` is correctly configured and that the tape drive is accessible.
+Errors during backup or restore are caught and logged for the moment only to the console. Ensure that your `TapeDeviceHandler` is correctly configured and that the tape drive is accessible.
 
 ## Contact
 
