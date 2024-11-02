@@ -84,10 +84,12 @@ A C# application designed to facilitate backup and restore operations to an LTO 
 
 ### Running the Application
 
-Execute the application by navigating to the project directory and running:
+Execute the application by navigating to the project directory `src\MaksIT.LTO.Backup` and running:
 ```bash
 dotnet build && dotnet run
 ```
+
+or use `dotnet_build_script.bat` to generate executables in `src\build_outputs`
 
 ### Application Menu
 
