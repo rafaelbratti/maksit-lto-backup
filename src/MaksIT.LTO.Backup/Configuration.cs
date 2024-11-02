@@ -12,7 +12,7 @@ public class LocalPath : PathBase {
 
 public class PasswordCredentials {
   public required string Username { get; set; }
-  public required SecureString Password { get; set; }
+  public required string Password { get; set; }
 }
 
 public class RemotePath : PathBase {
@@ -35,5 +35,6 @@ public class BackupItem {
 
 public class Configuration {
   public required string TapePath { get; set; }
+  public required int WriteDelay { get; set; }
   public required List<BackupItem> Backups { get; set; }
 }

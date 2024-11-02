@@ -21,23 +21,52 @@ A C# application designed to facilitate backup and restore operations to an LTO 
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-username/MaksIT.LTO.Backup.git
+   git clone https://github.com/MAKS-IT-COM/maksit-lto-backup
    ```
-2. Ensure `.NET Core` is installed on your system.
+2. Ensure `.NET8 SDK` is installed on your system.
 3. Prepare a `configuration.json` file in the application directory with the following structure:
    ```json
-   {
-     "TapePath": "YourTapePath",
-     "Backups": [
-       {
-         "Name": "BackupName",
-         "Barcode": "123456",
-         "Source": "path/to/source",
-         "Destination": "path/to/destination",
-         "LTOGen": "LTO6"
-       }
-     ]
-   }
+  {
+    "TapePath": "\\\\.\\Tape0",
+    "WriteDelay": 100,
+    "Backups": [
+      {
+        "Name": "Normal test",
+        "Barcode": "",
+        "LTOGen": "LTO5",
+        "Source": {
+          "LocalPath": {
+            "Path": "F:\\LTO\\Backup"
+          }
+        },
+        "Destination": {
+          "LocalPath": {
+            "Path": "F:\\LTO\\Restore"
+          }
+        }
+      },
+      {
+        "Name": "Network test",
+        "Barcode": "",
+        "LTOGen": "LTO5",
+        "Source": {
+          "RemotePath": {
+            "Path": "\\\\nassrv0001.corp.maks-it.com\\data-1\\Users",
+            "PasswordCredentials": {
+              "Username": "",
+              "Password": ""
+            },
+            "Protocol": "SMB"
+          }
+        },
+        "Destination": {
+          "LocalPath": {
+            "Path": "F:\\LTO\\Restore"
+          }
+        }
+      }
+    ]
+  }
    ```
 
 ## Usage
@@ -57,7 +86,11 @@ Upon running, the following options will be presented:
 2. **Backup**: Prompts the user to select a backup task from the configured list and initiates the backup process.
 3. **Restore**: Restores a previously backed-up directory from the tape.
 4. **Eject Tape**: Ejects the tape from the drive safely.
-5. **Exit**: Exits the application.
+5. **Get device status**: Mostly used for debugging to understand if device is able to write
+6. **Tape Erase (Short)**: 
+7. **Reload configurations**
+6. **Exit**: Exits the application.
+
 
 ### Code Overview
 
@@ -72,13 +105,42 @@ Below is an example configuration setup for an LTO-6 tape generation backup oper
 ```json
 {
   "TapePath": "\\\\.\\Tape0",
+  "WriteDelay": 100,
   "Backups": [
     {
-      "Name": "Monthly Backup",
-      "Barcode": "MB12345",
-      "Source": "/path/to/source",
-      "Destination": "/path/to/restore",
-      "LTOGen": "LTO6"
+      "Name": "Normal test",
+      "Barcode": "",
+      "LTOGen": "LTO5",
+      "Source": {
+        "LocalPath": {
+          "Path": "F:\\LTO\\Backup"
+        }
+      },
+      "Destination": {
+        "LocalPath": {
+          "Path": "F:\\LTO\\Restore"
+        }
+      }
+    },
+    {
+      "Name": "Network test",
+      "Barcode": "",
+      "LTOGen": "LTO5",
+      "Source": {
+        "RemotePath": {
+          "Path": "\\\\nassrv0001.corp.maks-it.com\\data-1\\Users",
+          "PasswordCredentials": {
+            "Username": "",
+            "Password": ""
+          },
+          "Protocol": "SMB"
+        }
+      },
+      "Destination": {
+        "LocalPath": {
+          "Path": "F:\\LTO\\Restore\\Users"
+        }
+      }
     }
   ]
 }

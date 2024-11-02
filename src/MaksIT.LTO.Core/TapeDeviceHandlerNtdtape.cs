@@ -325,7 +325,7 @@ public partial class TapeDeviceHandler : IDisposable {
   /// Erase the tape
   /// </summary>
   /// <param name="type">The type of erase operation. Valid values are <see cref="TAPE_ERASE_SHORT"/> and <see cref="TAPE_ERASE_LONG"/>.</param>
-  public void Erase(uint type) {
+  public int Erase(uint type) {
     TAPE_ERASE erase = new TAPE_ERASE {
       Type = type,
       Immediate = 0
@@ -343,11 +343,14 @@ public partial class TapeDeviceHandler : IDisposable {
       else {
         int error = Marshal.GetLastWin32Error();
         Console.WriteLine($"Erase Tape: Failed with error code {error}");
+        return error;
       }
     }
     finally {
       Marshal.FreeHGlobal(inBuffer);
     }
+
+    return 0;
   }
 
   /// <summary>

@@ -42,7 +42,7 @@ public class Application {
 
   public void LoadTape(TapeDeviceHandler handler) {
     handler.Prepare(TapeDeviceHandler.TAPE_LOAD);
-    handler.WaitForTapeReady();
+    Thread.Sleep(2000);
 
     Console.WriteLine("Tape loaded.");
   }
@@ -54,9 +54,39 @@ public class Application {
 
   public void EjectTape(TapeDeviceHandler handler) {
     handler.Prepare(TapeDeviceHandler.TAPE_UNLOAD);
-    handler.WaitForTapeReady();
+    Thread.Sleep(2000);
 
     Console.WriteLine("Tape ejected.");
+  }
+
+  public void TapeErase() {
+    using var handler = new TapeDeviceHandler(_tapePath);
+    LoadTape(handler);
+
+    handler.SetMediaParams(LTOBlockSizes.LTO5);
+
+    handler.SetPosition(TapeDeviceHandler.TAPE_REWIND);
+    Thread.Sleep(2000);
+
+    handler.Prepare(TapeDeviceHandler.TAPE_TENSION);
+    Thread.Sleep(2000);
+
+    handler.Prepare(TapeDeviceHandler.TAPE_LOCK);
+    Thread.Sleep(2000);
+
+    handler.Erase(TapeDeviceHandler.TAPE_ERASE_SHORT);
+    Thread.Sleep(2000);
+
+    handler.SetPosition(TapeDeviceHandler.TAPE_REWIND);
+    Thread.Sleep(2000);
+
+    Console.WriteLine("Tape erased.");
+  }
+
+
+  public void GetDeviceStatus() {
+    using var handler = new TapeDeviceHandler(_tapePath);
+    handler.GetStatus();
   }
 
 
@@ -148,9 +178,14 @@ public class Application {
     Console.WriteLine($"Writing {blocks} zero-filled blocks to tape.");
     Console.WriteLine($"Block Size: {blockSize}.");
 
+    var writeError = 0;
+
     for (int i = 0; i < blocks; i++) {
-      handler.WriteData(new byte[blockSize]);
-      handler.WaitForTapeReady();
+      writeError = handler.WriteData(new byte[blockSize]);
+      if (writeError != 0)
+        return;
+
+      Thread.Sleep(_configuration.WriteDelay);
     }
   }
 
@@ -166,13 +201,13 @@ public class Application {
       handler.SetMediaParams(blockSize);
 
       handler.SetPosition(TapeDeviceHandler.TAPE_REWIND);
-      handler.WaitForTapeReady();
+      Thread.Sleep(2000);
 
       handler.Prepare(TapeDeviceHandler.TAPE_TENSION);
-      handler.WaitForTapeReady();
+      Thread.Sleep(2000);
 
       handler.Prepare(TapeDeviceHandler.TAPE_LOCK);
-      handler.WaitForTapeReady();
+      Thread.Sleep(2000);
 
       handler.WaitForTapeReady();
 
@@ -185,6 +220,9 @@ public class Application {
       }
 
       var currentTapeBlock = (descriptorJson.Length + blockSize - 1) / blockSize;
+
+
+      int writeError = 0;
 
       foreach (var file in descriptor.Files) {
         var filePath = Path.Combine(directoryPath, file.FilePath);
@@ -199,15 +237,22 @@ public class Application {
             // Zero-fill the remaining part of the buffer if the last block is smaller than blockSize
             Array.Clear(buffer, bytesRead, buffer.Length - bytesRead);
           }
-          handler.WriteData(buffer);
+          
+          writeError = handler.WriteData(buffer);
+          if (writeError != 0) {
+            Console.WriteLine($"Failed to write file: {filePath}");
+            return;
+          }
+
           currentTapeBlock++;
-          handler.WaitForTapeReady();
+          Thread.Sleep(_configuration.WriteDelay); // Small delay between blocks
         }
       }
 
 
       // write mark to indicate end of files
       handler.WriteMarks(TapeDeviceHandler.TAPE_FILEMARKS, 1);
+      Thread.Sleep(_configuration.WriteDelay);
 
       // write descriptor to tape
       var descriptorData = Encoding.UTF8.GetBytes(descriptorJson);
@@ -217,18 +262,23 @@ public class Application {
         var length = Math.Min(blockSize, descriptorData.Length - startIndex);
         byte[] block = new byte[blockSize]; // Initialized with zeros by default
         Array.Copy(descriptorData, startIndex, block, 0, length);
-        handler.WriteData(block);
+        
+        writeError = handler.WriteData(block);
+        if (writeError != 0)
+          return;
+
         currentTapeBlock++;
-        handler.WaitForTapeReady();
+        Thread.Sleep(_configuration.WriteDelay); // Small delay between blocks
       }
 
       // write 3 0 filled blocks to indicate end of backup
       ZeroFillBlocks(handler, 3, blockSize);
 
       handler.Prepare(TapeDeviceHandler.TAPE_UNLOCK);
-      handler.WaitForTapeReady();
+      Thread.Sleep(2000);
+
       handler.SetPosition(TapeDeviceHandler.TAPE_REWIND);
-      handler.WaitForTapeReady();
+      Thread.Sleep(2000);
 
     });
   }
@@ -244,10 +294,10 @@ public class Application {
     handler.SetMediaParams(blockSize);
 
     handler.SetPosition(TapeDeviceHandler.TAPE_REWIND);
-    handler.WaitForTapeReady();
+    Thread.Sleep(2000);
 
     handler.SetPosition(TapeDeviceHandler.TAPE_SPACE_FILEMARKS, 0, 1);
-    handler.WaitForTapeReady();
+    Thread.Sleep(2000);
 
     handler.WaitForTapeReady();
 
@@ -291,9 +341,10 @@ public class Application {
 
 
     handler.Prepare(TapeDeviceHandler.TAPE_UNLOCK);
-    handler.WaitForTapeReady();
+    Thread.Sleep(2000);
+
     handler.SetPosition(TapeDeviceHandler.TAPE_REWIND);
-    handler.WaitForTapeReady();
+    Thread.Sleep(2000);
 
     return null;
   }
@@ -311,14 +362,12 @@ public class Application {
       handler.SetMediaParams(descriptor.BlockSize);
 
       handler.SetPosition(TapeDeviceHandler.TAPE_REWIND);
-      handler.WaitForTapeReady();
-
-      handler.WaitForTapeReady();
+      Thread.Sleep(2000);
 
       foreach (var file in descriptor.Files) {
         // Set position to the start block of the file
         handler.SetPosition(TapeDeviceHandler.TAPE_ABSOLUTE_BLOCK, 0, file.StartBlock);
-        handler.WaitForTapeReady();
+        Thread.Sleep(2000);
 
         var filePath = Path.Combine(restoreDirectoryPath, file.FilePath);
         var directoryPath = Path.GetDirectoryName(filePath);
@@ -358,7 +407,7 @@ public class Application {
       }
 
       handler.SetPosition(TapeDeviceHandler.TAPE_REWIND);
-      handler.WaitForTapeReady();
+      Thread.Sleep(2000);
     });
   }
 
@@ -396,7 +445,7 @@ public class Application {
       Console.WriteLine("\nSelect a backup to perform:");
       for (int i = 0; i < _configuration.Backups.Count; i++) {
         var backupInt = _configuration.Backups[i];
-        Console.WriteLine($"{i + 1}. Backup Name: {backupInt.Name}, Bar code {backupInt.Barcode}, Source: {backupInt.Source}, Destination: {backupInt.Destination}");
+        Console.WriteLine($"{i + 1}. Backup Name: {backupInt.Name}, Bar code {(string.IsNullOrEmpty(backupInt.Barcode) ? "None" : backupInt.Barcode)}, Source: {backupInt.Source}, Destination: {backupInt.Destination}");
       }
 
       Console.Write("Enter your choice (or '0' to go back): ");
@@ -437,7 +486,7 @@ public class Application {
       Console.WriteLine("\nSelect a backup to restore:");
       for (int i = 0; i < _configuration.Backups.Count; i++) {
         var backupInt = _configuration.Backups[i];
-        Console.WriteLine($"{i + 1}. Backup Name: {backupInt.Name}, Bar code {backupInt.Barcode}, Source: {backupInt.Source}, Destination: {backupInt.Destination}");
+        Console.WriteLine($"{i + 1}. Backup Name: {backupInt.Name}, Bar code {(string.IsNullOrEmpty(backupInt.Barcode) ? "None" : backupInt.Barcode)}, Source: {backupInt.Source}, Destination: {backupInt.Destination}");
       }
 
       Console.Write("Enter your choice (or '0' to go back): ");
