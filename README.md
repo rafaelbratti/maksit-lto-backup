@@ -25,49 +25,50 @@ A C# application designed to facilitate backup and restore operations to an LTO 
    ```
 2. Ensure `.NET8 SDK` is installed on your system.
 3. Prepare a `configuration.json` file in the application directory with the following structure:
-   ```json
-  {
-    "TapePath": "\\\\.\\Tape0",
-    "WriteDelay": 100,
-    "Backups": [
-      {
-        "Name": "Normal test",
-        "Barcode": "",
-        "LTOGen": "LTO5",
-        "Source": {
-          "LocalPath": {
-            "Path": "F:\\LTO\\Backup"
-          }
-        },
-        "Destination": {
-          "LocalPath": {
-            "Path": "F:\\LTO\\Restore"
-          }
+
+```json
+{
+  "TapePath": "\\\\.\\Tape0",
+  "WriteDelay": 100,
+  "Backups": [
+    {
+      "Name": "Normal test",
+      "Barcode": "",
+      "LTOGen": "LTO5",
+      "Source": {
+        "LocalPath": {
+          "Path": "F:\\LTO\\Backup"
         }
       },
-      {
-        "Name": "Network test",
-        "Barcode": "",
-        "LTOGen": "LTO5",
-        "Source": {
-          "RemotePath": {
-            "Path": "\\\\nassrv0001.corp.maks-it.com\\data-1\\Users",
-            "PasswordCredentials": {
-              "Username": "",
-              "Password": ""
-            },
-            "Protocol": "SMB"
-          }
-        },
-        "Destination": {
-          "LocalPath": {
-            "Path": "F:\\LTO\\Restore"
-          }
+      "Destination": {
+        "LocalPath": {
+          "Path": "F:\\LTO\\Restore"
         }
       }
-    ]
-  }
-   ```
+    },
+    {
+      "Name": "Network test",
+      "Barcode": "",
+      "LTOGen": "LTO5",
+      "Source": {
+        "RemotePath": {
+          "Path": "\\\\nassrv0001.corp.maks-it.com\\data-1\\Users",
+          "PasswordCredentials": {
+            "Username": "",
+            "Password": ""
+          },
+          "Protocol": "SMB"
+        }
+      },
+      "Destination": {
+        "LocalPath": {
+          "Path": "F:\\LTO\\Restore"
+        }
+      }
+    }
+  ]
+}
+```
 
 ## Usage
 
