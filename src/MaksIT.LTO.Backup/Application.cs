@@ -244,27 +244,7 @@ public class Application {
     });
   }
 
-  private static byte[] AddPadding(byte[] data, int blockSize) {
-    // Calculate the padding size
-    int paddingSize = blockSize - (data.Length % blockSize);
-    if (paddingSize == blockSize) {
-      paddingSize = 0;
-    }
 
-    // Create a new array with the original data plus padding
-    byte[] paddedData = new byte[data.Length + paddingSize + 1];
-    Array.Copy(data, paddedData, data.Length);
-
-    // Fill the padding with a specific value (e.g., 0x00)
-    for (int i = data.Length; i < paddedData.Length - 1; i++) {
-      paddedData[i] = 0x00;
-    }
-
-    // Append the padding size at the end
-    paddedData[paddedData.Length - 1] = (byte)paddingSize;
-
-    return paddedData;
-  }
 
   private void WriteFilesToTape(WorkingFolder workingFolder, string descriptorFilePath, uint blockSize) {
     PathAccessWrapper(workingFolder, (directoryPath) => {
@@ -334,7 +314,7 @@ public class Application {
       var encryptedDescriptorData = AESGCMUtility.EncryptData(descriptorData, _secret);
 
       // add padding to the encrypted descriptor data
-      var paddedDescriptorData = AddPadding(encryptedDescriptorData, (int)blockSize);
+      var paddedDescriptorData = PaddingUtility.AddPadding(encryptedDescriptorData, (int)blockSize);
 
       // calculate the number of blocks needed
       var descriptorBlocks = (paddedDescriptorData.Length + blockSize - 1) / blockSize;
@@ -381,55 +361,53 @@ public class Application {
     handler.SetPosition(TapeDeviceHandler.TAPE_SPACE_FILEMARKS, 0, 1);
     Thread.Sleep(2000);
 
-    var position = handler.GetPosition(TapeDeviceHandler.TAPE_ABSOLUTE_BLOCK);
-    if (position.Error != null)
+    var endOfBackupMarkerPosition = handler.GetPosition(TapeDeviceHandler.TAPE_ABSOLUTE_BLOCK);
+    if (endOfBackupMarkerPosition.Error != null || endOfBackupMarkerPosition.OffsetLow == null)
       return null;
 
-    var desctiptorBlocks = position.OffsetLow;
+    _logger.LogInformation($"End of backup marker position: {endOfBackupMarkerPosition.OffsetLow}");
+
+    var descriptorBlocks = endOfBackupMarkerPosition.OffsetLow;
 
     handler.SetPosition(TapeDeviceHandler.TAPE_SPACE_FILEMARKS, 0, 2);
     Thread.Sleep(2000);
 
-    position = handler.GetPosition(TapeDeviceHandler.TAPE_ABSOLUTE_BLOCK);
-    if (position.Error != null)
+    var endOfDescriptorMarkerPosition = handler.GetPosition(TapeDeviceHandler.TAPE_ABSOLUTE_BLOCK);
+    if (endOfDescriptorMarkerPosition.Error != null || endOfDescriptorMarkerPosition.OffsetLow == null)
       return null;
 
-    desctiptorBlocks = position.OffsetLow - desctiptorBlocks;
+    _logger.LogInformation($"End of descriptor marker position: {endOfDescriptorMarkerPosition.OffsetLow}");
 
+    descriptorBlocks = endOfDescriptorMarkerPosition.OffsetLow - descriptorBlocks;
 
-    var padding = handler.ReadData(blockSize);
+    if (descriptorBlocks == null)
+      return null;
 
-    handler.SetPosition(TapeDeviceHandler.TAPE_SPACE_FILEMARKS, 0, 1);
+    _logger.LogInformation($"Descriptor blocks to read: {descriptorBlocks}");
+
+    handler.SetPosition(TapeDeviceHandler.TAPE_ABSOLUTE_BLOCK, 0, (long)(endOfDescriptorMarkerPosition.OffsetLow - descriptorBlocks));
     Thread.Sleep(2000);
 
-    // read data from descriptorBlocks
-    var buffer = new List<byte>();
-    for (var i = 0; i < desctiptorBlocks; i++) {
-      var data = handler.ReadData(blockSize);
-      buffer.AddRange(data);
+    descriptorBlocks -= 2;
+
+    var paddedData = new byte[(descriptorBlocks.Value) * blockSize];
+    var buffer = new byte[blockSize];
+
+    for (var i = 0; i < descriptorBlocks; i++) {
+      var bytesRead = handler.ReadData(buffer, 0, buffer.Length);
+
+      // Copy the read data into the encryptedData array
+      Array.Copy(buffer, 0, paddedData, i * blockSize, buffer.Length);
     }
 
-    // Convert buffer to array
-    var paddedData = buffer.ToArray();
+    // i need to remove padding from the data
+    var encryptedData = PaddingUtility.RemovePadding(paddedData, (int)blockSize);
 
-    // Retrieve the padding size from the last byte
-    int paddingSize = paddedData[^1];
-
-    // Calculate the length of the original data
-    int originalDataLength = paddedData.Length - paddingSize - 1;
-
-    // Ensure the padding size is valid
-    if (paddingSize < 0 || paddingSize >= paddedData.Length || originalDataLength < 0)
-      return null;
-
-    // Create a new array for the original data
-    var descriptorData = new byte[originalDataLength];
-    Array.Copy(paddedData, descriptorData, originalDataLength);
-
-    descriptorData = AESGCMUtility.DecryptData(descriptorData, _secret);
+    // decrypt the data
+    var decryptedData = AESGCMUtility.DecryptData(encryptedData, _secret);
 
     // Convert byte array to string and trim ending zeros
-    var json = Encoding.UTF8.GetString(descriptorData);
+    var json = Encoding.UTF8.GetString(decryptedData);
 
     try {
       var descriptor = JsonSerializer.Deserialize<BackupDescriptor>(json);
@@ -514,7 +492,7 @@ public class Application {
 
     var encryptedDescriptorData = AESGCMUtility.EncryptData(File.ReadAllBytes(_descriptorFilePath), _secret);
 
-    var paddedDescriptorData = AddPadding(encryptedDescriptorData, (int)descriptor.BlockSize);
+    var paddedDescriptorData = PaddingUtility.AddPadding(encryptedDescriptorData, (int)descriptor.BlockSize);
 
     const ulong fileMarkBlocks = 2;
  
