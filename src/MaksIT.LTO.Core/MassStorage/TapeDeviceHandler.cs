@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
+using Microsoft.Extensions.Logging;
 using Microsoft.Win32.SafeHandles;
 
 // https://github.com/tpn/winsdk-10
@@ -8,10 +9,10 @@ using Microsoft.Win32.SafeHandles;
 namespace MaksIT.LTO.Core;
 
 public partial class TapeDeviceHandler : IDisposable {
+
+  private readonly ILogger<TapeDeviceHandler> _logger;
   private string _tapeDevicePath;
   private SafeFileHandle _tapeHandle;
-
-
 
   private const uint GENERIC_READ = 0x80000000;
   private const uint GENERIC_WRITE = 0x40000000;
@@ -67,7 +68,11 @@ public partial class TapeDeviceHandler : IDisposable {
       out uint lpNumberOfBytesRead,
       IntPtr lpOverlapped);
 
-  public TapeDeviceHandler(string tapeDevicePath) {
+  public TapeDeviceHandler(
+    ILogger<TapeDeviceHandler> logger,
+    string tapeDevicePath
+  ) {
+    _logger = logger;
     _tapeDevicePath = tapeDevicePath;
     OpenTapeDevice(GENERIC_READ | GENERIC_WRITE);
   }

@@ -1,27 +1,23 @@
 ﻿using System.Net;
 using System.Runtime.InteropServices;
 
-namespace MaksIT.LTO.Core;
+using Microsoft.Extensions.Logging;
 
-//public void RestoreFilesFromSmbShare(string smbPath, string username, string password, string domain, string restoreDirectory) {
-//  var credentials = new NetworkCredential(username, password, domain);
-//  using (new NetworkConnection(smbPath, credentials)) {
-//    var files = Directory.GetFiles(smbPath, "*.*", SearchOption.AllDirectories);
-//    foreach (var file in files) {
-//      var relativePath = Path.GetRelativePath(smbPath, file);
-//      var destinationPath = Path.Combine(restoreDirectory, relativePath);
-//      Directory.CreateDirectory(Path.GetDirectoryName(destinationPath));
-//      File.Copy(file, destinationPath, overwrite: true);
-//      Console.WriteLine($"Restored file: {file} to {destinationPath}");
-//    }
-//  }
-//}
 
+namespace MaksIT.LTO.Core.Networking;
 
 public class NetworkConnection : IDisposable {
+
+  private readonly ILogger<NetworkConnection> _logger;
   private readonly string _networkName;
 
-  public NetworkConnection(string networkName, NetworkCredential credentials) {
+  public NetworkConnection(
+    ILogger<NetworkConnection> logger,
+    string networkName,
+    NetworkCredential credentials) {
+
+    _logger = logger;
+
     _networkName = networkName;
 
     var netResource = new NetResource {
