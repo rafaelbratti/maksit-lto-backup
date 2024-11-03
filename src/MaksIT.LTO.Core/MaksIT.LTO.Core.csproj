@@ -5,6 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <DefineConstants>NTDDI_VERSION_05010000;NTDDI_WINXP_05010000</DefineConstants>
+    <Version>0.0.2</Version>
   </PropertyGroup>
 
   <ItemGroup>

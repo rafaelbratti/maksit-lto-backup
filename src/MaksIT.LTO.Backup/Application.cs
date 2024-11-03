@@ -9,6 +9,8 @@ using MaksIT.LTO.Core;
 using MaksIT.LTO.Backup.Entities;
 using MaksIT.LTO.Core.MassStorage;
 using MaksIT.LTO.Core.Networking;
+using MaksIT.LTO.Core.Utilities;
+using MaksIT.LTO.Core.Helpers;
 
 
 namespace MaksIT.LTO.Backup;
@@ -16,16 +18,19 @@ namespace MaksIT.LTO.Backup;
 public class Application {
 
   private const string _descriptoFileName = "descriptor.json";
+  private const string _secretFileName = "secret.txt";
 
   private readonly string appPath = AppDomain.CurrentDomain.BaseDirectory;
   private readonly string _tapePath;
   private readonly string _descriptorFilePath;
+  private readonly string _secretFilePath;
 
   private readonly ILogger<Application> _logger;
   private readonly ILogger<TapeDeviceHandler> _tapeDeviceLogger;
   private readonly ILogger<NetworkConnection> _networkConnectionLogger;
 
   private readonly Configuration _configuration;
+  private readonly string _secret;
 
   public Application(
     ILogger<Application> logger,
@@ -37,9 +42,26 @@ public class Application {
     _networkConnectionLogger = loggerFactory.CreateLogger<NetworkConnection>();
 
     _descriptorFilePath = Path.Combine(appPath, _descriptoFileName);
+    _secretFilePath = Path.Combine(appPath, _secretFileName);
 
     _configuration = configuration.Value;
     _tapePath = _configuration.TapePath;
+
+    var secret = Environment.GetEnvironmentVariable("LTO_BACKUP_SECRET")
+      ?? Environment.GetEnvironmentVariable("LTO_BACKUP_SECRET", EnvironmentVariableTarget.Machine);
+
+    if (!string.IsNullOrWhiteSpace(secret))
+      _secret = secret;
+    else if (!File.Exists(_secretFilePath)) {
+      _secret = AESGCMUtility.GenerateKeyBase64();
+      File.WriteAllText(_secretFilePath, _secret);
+    }
+    else
+      _secret = File.ReadAllText(_secretFilePath);
+
+    if (string.IsNullOrWhiteSpace(_secret)) {
+      throw new InvalidOperationException("Secret is required for encryption.");
+    }
   }
 
   public void Run() {
@@ -95,31 +117,31 @@ public class Application {
     }
   }
 
-  public void LoadTape() {
+  private void LoadTape() {
     using var handler = new TapeDeviceHandler(_tapeDeviceLogger, _tapePath);
     LoadTape(handler);
   }
 
-  public void LoadTape(TapeDeviceHandler handler) {
+  private void LoadTape(TapeDeviceHandler handler) {
     handler.Prepare(TapeDeviceHandler.TAPE_LOAD);
     Thread.Sleep(2000);
 
     _logger.LogInformation("Tape loaded.");
   }
 
-  public void EjectTape() {
+  private void EjectTape() {
     using var handler = new TapeDeviceHandler(_tapeDeviceLogger, _tapePath);
     EjectTape(handler);
   }
 
-  public void EjectTape(TapeDeviceHandler handler) {
+  private void EjectTape(TapeDeviceHandler handler) {
     handler.Prepare(TapeDeviceHandler.TAPE_UNLOAD);
     Thread.Sleep(2000);
 
     _logger.LogInformation("Tape ejected.");
   }
 
-  public void TapeErase() {
+  private void TapeErase() {
     using var handler = new TapeDeviceHandler(_tapeDeviceLogger, _tapePath);
     LoadTape(handler);
 
@@ -143,12 +165,12 @@ public class Application {
     _logger.LogInformation("Tape erased.");
   }
 
-  public void GetDeviceStatus() {
+  private void GetDeviceStatus() {
     using var handler = new TapeDeviceHandler(_tapeDeviceLogger, _tapePath);
     handler.GetStatus();
   }
 
-  public void PathAccessWrapper(WorkingFolder workingFolder, Action<string> myAction) {
+  private void PathAccessWrapper(WorkingFolder workingFolder, Action<string> myAction) {
 
     if (workingFolder.LocalPath != null) {
       var localPath = workingFolder.LocalPath.Path;
@@ -182,7 +204,7 @@ public class Application {
     }
   }
 
-  public void CreateDescriptor(WorkingFolder workingFolder, string descriptorFilePath, uint blockSize) {
+  private void CreateDescriptor(WorkingFolder workingFolder, string descriptorFilePath, uint blockSize) {
 
     PathAccessWrapper(workingFolder, (directoryPath) => {
       var files = Directory.GetFiles(directoryPath, "*.*", SearchOption.AllDirectories);
@@ -196,18 +218,8 @@ public class Application {
         var relativePath = Path.GetRelativePath(directoryPath, filePath);
         var numberOfBlocks = (uint)((fileInfo.Length + blockSize - 1) / blockSize);
 
-        // Optional: Calculate a simple hash for file integrity (e.g., MD5)
-        using var md5 = System.Security.Cryptography.MD5.Create();
-        using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
-        using var bufferedStream = new BufferedStream(fileStream, (int)blockSize);
-
-        byte[] buffer = new byte[blockSize];
-        int bytesRead;
-        while ((bytesRead = bufferedStream.Read(buffer, 0, buffer.Length)) > 0) {
-          md5.TransformBlock(buffer, 0, bytesRead, null, 0);
-        }
-        md5.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
-        string fileHash = BitConverter.ToString(md5.Hash).Replace("-", "").ToLower();
+        // Calculate CRC32 checksum for file integrity
+        string fileHash = ChecksumUtility.CalculateCRC32ChecksumFromFileInChunks(filePath, (int)blockSize);
 
         descriptor.Add(new FileDescriptor {
           StartBlock = currentTapeBlock, // Position of the file on the tape
@@ -232,22 +244,29 @@ public class Application {
     });
   }
 
-  private void ZeroFillBlocks(TapeDeviceHandler handler, int blocks, uint blockSize) {
-    _logger.LogInformation($"Writing {blocks} zero-filled blocks to tape.");
-    _logger.LogInformation($"Block Size: {blockSize}.");
-
-    var writeError = 0;
-
-    for (int i = 0; i < blocks; i++) {
-      writeError = handler.WriteData(new byte[blockSize]);
-      if (writeError != 0)
-        return;
-
-      Thread.Sleep(_configuration.WriteDelay);
+  private static byte[] AddPadding(byte[] data, int blockSize) {
+    // Calculate the padding size
+    int paddingSize = blockSize - (data.Length % blockSize);
+    if (paddingSize == blockSize) {
+      paddingSize = 0;
     }
+
+    // Create a new array with the original data plus padding
+    byte[] paddedData = new byte[data.Length + paddingSize + 1];
+    Array.Copy(data, paddedData, data.Length);
+
+    // Fill the padding with a specific value (e.g., 0x00)
+    for (int i = data.Length; i < paddedData.Length - 1; i++) {
+      paddedData[i] = 0x00;
+    }
+
+    // Append the padding size at the end
+    paddedData[paddedData.Length - 1] = (byte)paddingSize;
+
+    return paddedData;
   }
 
-  public void WriteFilesToTape(WorkingFolder workingFolder, string descriptorFilePath, uint blockSize) {
+  private void WriteFilesToTape(WorkingFolder workingFolder, string descriptorFilePath, uint blockSize) {
     PathAccessWrapper(workingFolder, (directoryPath) => {
       _logger.LogInformation($"Writing files to tape from: {directoryPath}.");
       _logger.LogInformation($"Block Size: {blockSize}.");
@@ -279,9 +298,6 @@ public class Application {
 
       var currentTapeBlock = (descriptorJson.Length + blockSize - 1) / blockSize;
 
-
-      int writeError = 0;
-
       foreach (var file in descriptor.Files) {
         var filePath = Path.Combine(directoryPath, file.FilePath);
         using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
@@ -296,7 +312,7 @@ public class Application {
             Array.Clear(buffer, bytesRead, buffer.Length - bytesRead);
           }
           
-          writeError = handler.WriteData(buffer);
+          var writeError = handler.WriteData(buffer);
           if (writeError != 0) {
             _logger.LogInformation($"Failed to write file: {filePath}");
             return;
@@ -307,21 +323,28 @@ public class Application {
         }
       }
 
-
       // write mark to indicate end of files
       handler.WriteMarks(TapeDeviceHandler.TAPE_FILEMARKS, 1);
       Thread.Sleep(_configuration.WriteDelay);
 
       // write descriptor to tape
       var descriptorData = Encoding.UTF8.GetBytes(descriptorJson);
-      var descriptorBlocks = (descriptorData.Length + blockSize - 1) / blockSize;
-      for (int i = 0; i < descriptorBlocks; i++) {
+
+      // encrypt the serialized descriptor
+      var encryptedDescriptorData = AESGCMUtility.EncryptData(descriptorData, _secret);
+
+      // add padding to the encrypted descriptor data
+      var paddedDescriptorData = AddPadding(encryptedDescriptorData, (int)blockSize);
+
+      // calculate the number of blocks needed
+      var descriptorBlocks = (paddedDescriptorData.Length + blockSize - 1) / blockSize;
+      for (var i = 0; i < descriptorBlocks; i++) {
         var startIndex = i * blockSize;
-        var length = Math.Min(blockSize, descriptorData.Length - startIndex);
-        byte[] block = new byte[blockSize]; // Initialized with zeros by default
-        Array.Copy(descriptorData, startIndex, block, 0, length);
-        
-        writeError = handler.WriteData(block);
+        var length = Math.Min(blockSize, paddedDescriptorData.Length - startIndex);
+        var block = new byte[blockSize]; // Initialized with zeros by default
+        Array.Copy(paddedDescriptorData, startIndex, block, 0, length);
+
+        var writeError = handler.WriteData(block);
         if (writeError != 0)
           return;
 
@@ -329,8 +352,9 @@ public class Application {
         Thread.Sleep(_configuration.WriteDelay); // Small delay between blocks
       }
 
-      // write 3 0 filled blocks to indicate end of backup
-      ZeroFillBlocks(handler, 3, blockSize);
+      // write mark to indicate end of files
+      handler.WriteMarks(TapeDeviceHandler.TAPE_FILEMARKS, 2);
+      Thread.Sleep(_configuration.WriteDelay);
 
       handler.Prepare(TapeDeviceHandler.TAPE_UNLOCK);
       Thread.Sleep(2000);
@@ -341,7 +365,7 @@ public class Application {
     });
   }
 
-  public BackupDescriptor? FindDescriptor(uint blockSize) {
+  private BackupDescriptor? FindDescriptor(uint blockSize) {
     _logger.LogInformation("Searching for descriptor on tape...");
     _logger.LogInformation($"Block Size: {blockSize}.");
 
@@ -357,34 +381,55 @@ public class Application {
     handler.SetPosition(TapeDeviceHandler.TAPE_SPACE_FILEMARKS, 0, 1);
     Thread.Sleep(2000);
 
-    handler.WaitForTapeReady();
+    var position = handler.GetPosition(TapeDeviceHandler.TAPE_ABSOLUTE_BLOCK);
+    if (position.Error != null)
+      return null;
 
-    // Read data from tape until 3 zero-filled blocks are found
+    var desctiptorBlocks = position.OffsetLow;
+
+    handler.SetPosition(TapeDeviceHandler.TAPE_SPACE_FILEMARKS, 0, 2);
+    Thread.Sleep(2000);
+
+    position = handler.GetPosition(TapeDeviceHandler.TAPE_ABSOLUTE_BLOCK);
+    if (position.Error != null)
+      return null;
+
+    desctiptorBlocks = position.OffsetLow - desctiptorBlocks;
+
+
+    var padding = handler.ReadData(blockSize);
+
+    handler.SetPosition(TapeDeviceHandler.TAPE_SPACE_FILEMARKS, 0, 1);
+    Thread.Sleep(2000);
+
+    // read data from descriptorBlocks
     var buffer = new List<byte>();
-    byte[] data;
-    var zeroBlocks = 0;
-    do {
-      data = handler.ReadData(blockSize);
+    for (var i = 0; i < desctiptorBlocks; i++) {
+      var data = handler.ReadData(blockSize);
       buffer.AddRange(data);
-      if (data.All(b => b == 0)) {
-        zeroBlocks++;
-      }
-      else {
-        zeroBlocks = 0;
-      }
-    } while (zeroBlocks < 3);
-
-    // Remove the last 3 zero-filled blocks from the buffer
-    var totalZeroBlocksSize = (int)(3 * blockSize);
-    if (buffer.Count >= totalZeroBlocksSize) {
-      buffer.RemoveRange(buffer.Count - totalZeroBlocksSize, totalZeroBlocksSize);
     }
 
-    // Convert buffer to byte array
-    var byteArray = buffer.ToArray();
+    // Convert buffer to array
+    var paddedData = buffer.ToArray();
+
+    // Retrieve the padding size from the last byte
+    int paddingSize = paddedData[^1];
+
+    // Calculate the length of the original data
+    int originalDataLength = paddedData.Length - paddingSize - 1;
+
+    // Ensure the padding size is valid
+    if (paddingSize < 0 || paddingSize >= paddedData.Length || originalDataLength < 0)
+      return null;
+
+    // Create a new array for the original data
+    var descriptorData = new byte[originalDataLength];
+    Array.Copy(paddedData, descriptorData, originalDataLength);
+
+    descriptorData = AESGCMUtility.DecryptData(descriptorData, _secret);
 
     // Convert byte array to string and trim ending zeros
-    var json = Encoding.UTF8.GetString(byteArray).TrimEnd('\0');
+    var json = Encoding.UTF8.GetString(descriptorData);
 
     try {
       var descriptor = JsonSerializer.Deserialize<BackupDescriptor>(json);
@@ -395,8 +440,8 @@ public class Application {
     }
     catch (JsonException ex) {
       _logger.LogInformation($"Failed to parse descriptor JSON: {ex.Message}");
+      return null;
     }
-
 
     handler.Prepare(TapeDeviceHandler.TAPE_UNLOCK);
     Thread.Sleep(2000);
@@ -407,7 +452,7 @@ public class Application {
     return null;
   }
 
-  public void RestoreDirectory(BackupDescriptor descriptor, WorkingFolder workingFolder) {
+  private void RestoreDirectory(BackupDescriptor descriptor, WorkingFolder workingFolder) {
 
     PathAccessWrapper(workingFolder, (restoreDirectoryPath) => {
       _logger.LogInformation("Restoring files to directory: " + restoreDirectoryPath);
@@ -448,20 +493,11 @@ public class Application {
           }
         }
 
-        // check md5 checksum of restored file with the one in descriptor
-        using (var md5 = System.Security.Cryptography.MD5.Create()) {
-          using (var fileStreamRead = new FileStream(filePath, FileMode.Open, FileAccess.Read)) {
-            var fileHash = md5.ComputeHash(fileStreamRead);
-            var fileHashString = BitConverter.ToString(fileHash).Replace("-", "").ToLower();
-
-            if (fileHashString != file.FileHash) {
-              _logger.LogInformation($"Checksum mismatch for file: {filePath}");
-            }
-            else {
-              _logger.LogInformation($"Restored file: {filePath}");
-            }
-          }
-        }
+        // check checksum of restored file with the one in descriptor
+        if (ChecksumUtility.VerifyCRC32ChecksumFromFileInChunks(filePath, file.FileHash, (int)descriptor.BlockSize))
+          _logger.LogInformation($"Restored file: {filePath}");
+        else
+          _logger.LogInformation($"Checksum mismatch for file: {filePath}");
       }
 
       handler.SetPosition(TapeDeviceHandler.TAPE_REWIND);
@@ -469,22 +505,23 @@ public class Application {
     });
   }
 
-  public int CheckMediaSize(string ltoGen) {
+  private int CheckMediaSize(string ltoGen) {
     var descriptor = JsonSerializer.Deserialize<BackupDescriptor>(File.ReadAllText(_descriptorFilePath));
     if (descriptor == null) {
       _logger.LogInformation("Failed to read descriptor.");
       return 1;
     }
 
-    var totalBlocks = (ulong)descriptor.Files.Sum(f => f.NumberOfBlocks);
+    var encryptedDescriptorData = AESGCMUtility.EncryptData(File.ReadAllBytes(_descriptorFilePath), _secret);
 
-    const ulong fileMarkBlocks = 1;
-    const ulong terminalBlocks = 3;
+    var paddedDescriptorData = AddPadding(encryptedDescriptorData, (int)descriptor.BlockSize);
 
-    var descriptorSize = new FileInfo(_descriptoFileName).Length;
-    ulong descriptorSizeBlocks = (ulong)Math.Ceiling((double)descriptorSize / descriptor.BlockSize);
+    const ulong fileMarkBlocks = 2;
+ 
+    var descriptorSize = paddedDescriptorData.Length;
+    var descriptorSizeBlocks = Math.Ceiling((double)descriptorSize / descriptor.BlockSize);
 
-    totalBlocks += fileMarkBlocks + descriptorSizeBlocks + terminalBlocks;
+    var totalBlocks = fileMarkBlocks + descriptorSizeBlocks;
 
     var maxBlocks = LTOBlockSizes.GetMaxBlocks(ltoGen);
     if (totalBlocks > maxBlocks) {
@@ -498,7 +535,7 @@ public class Application {
     return 0;
   }
 
-  public void Backup() {
+  private void Backup() {
     while (true) {
       _logger.LogInformation("\nSelect a backup to perform:");
       for (int i = 0; i < _configuration.Backups.Count; i++) {
@@ -539,7 +576,7 @@ public class Application {
     }
   }
 
-  public void Restore() {
+  private void Restore() {
     while (true) {
       _logger.LogInformation("\nSelect a backup to restore:");
       for (int i = 0; i < _configuration.Backups.Count; i++) {
@@ -582,4 +619,3 @@ public class Application {
     }
   }
 }
-
