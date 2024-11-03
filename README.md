@@ -1,6 +1,6 @@
 # MaksIT.LTO.Backup
 
-**⚠️ Warning: This program is currently under fine-tuning and some features are still being added. Extensive real-world testing is still in progress. Use it at your own risk until a stable version is released.**
+**⚠️ Warning: This program is currently under fine-tuning and some features are still being added. Extensive real-world testing is still in progress. Use it at your own risk.**
 
 A C# application designed to facilitate backup and restore operations to an LTO tape drive. This application enables seamless management of backups by handling file organization, descriptor creation, and efficient tape handling processes for loading, writing, and restoring data.
 
@@ -13,13 +13,10 @@ A C# application designed to facilitate backup and restore operations to an LTO 
 - Customizable block sizes for different LTO generations.
 - File checksum verification during restore
 
-## Features
-
-- **Load and Eject Tape**: Safely loads and unloads the tape using `TapeDeviceHandler`.
-- **Backup Operation**: Allows users to create a descriptor file for organizing file metadata and backs up files to the LTO tape in structured blocks.
-- **File Descriptor Management**: Metadata is organized for each file, including file paths, sizes, creation, modification times and checksum.
-- **Restore Operation**: Reads data from the tape and restores files to a specified directory, reconstructing original file structure with checksum verifications.
-- **Customizable Block Sizes**: Supports multiple LTO generations, allowing customization of block sizes based on the tape generation (e.g., LTO-6).
+**v0.0.2 - (03/11/2024)**
+- Use of Crc32 for restored data checksums
+- Improved descriptor handling with AESGCM signature and integrity check
+- Code review, DI, File logger
 
 ## Requirements
 
@@ -85,11 +82,22 @@ A C# application designed to facilitate backup and restore operations to an LTO 
 ### Running the Application
 
 Execute the application by navigating to the project directory `src\MaksIT.LTO.Backup` and running:
-```bash
+
+```powershell
 dotnet build && dotnet run
 ```
 
-or use `dotnet_build_script.bat` to generate executables in `src\build_outputs`
+or use `dotnet_build_script.bat` to generate executables in `src\build_outputs`. From version `v0.0.2` I started to provide already compiled binaries in [Releases](https://github.com/MAKS-IT-COM/maksit-lto-backup/releases). You have to execute `MaksIT.LTO.Backup.exe` with administrative privileges.
+
+> ⚠️ **Warning**:  When the application is started for the first time, a special secret.txt will be generated in the program root folder. This secret is used to sign descriptor and used during restore to decrypt it and perform integrity check. Please keep its copy safe somwhere.
+> In case if in your scenario `secret.txt` is a seurity risk, then create system environment variable `LTO_BACKUP_SECRET` and use content from `secret.txt` as a value, after you can delete `secret.txt` from the application folder.
+
+Here is a powershell snippet to create system environment variable:
+
+```powershel
+[System.Environment]::SetEnvironmentVariable("LTO_BACKUP_SECRET", "<secret.txt content here>", [System.EnvironmentVariableTarget]::Machine)
+```
+
 
 ### Application Menu
 
@@ -101,14 +109,7 @@ Upon running, the following options will be presented:
 4. **Eject Tape**: Ejects the tape from the drive.
 5. **Get device status**: Mostly used for debugging to understand if device is able to write
 6. **Tape Erase (Short)**: Short tape erase
-7. **Reload configurations**: Works outside development evironment, used to reload configurations in case of `configuration.json` is changed
-8. **Exit**: Exits the application.
-
-### Code Overview
-
-- **Application Class**: Main class handling backup and restore functionalities. Provides methods like `LoadTape`, `EjectTape`, `Backup`, `Restore`, `CreateDescriptor`, `WriteFilesToTape`, and `FindDescriptor`.
-- **TapeDeviceHandler**: Controls tape device operations such as setting positions, writing data, and reading data.
-- **BackupDescriptor**: Organizes metadata for backed-up files. Used to log details about each file block on tape.
+7. **Exit**: Exits the application.
 
 ### Sample Configuration
 
@@ -160,7 +161,7 @@ Below is an example configuration setup for an LTO-6 tape generation backup oper
 
 ### Error Handling
 
-Errors during backup or restore are caught and logged for the moment only to the console. Ensure that your `TapeDeviceHandler` is correctly configured and that the tape drive is accessible.
+Errors during backup or restore are caught and logged to the console and to `log.txt` in the program root folder.
 
 ## Contact
 
